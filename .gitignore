@@ -1,5 +1,9 @@
-/.DS_Store
-/__pycache__
-/health_check.py
-/old_scraper.py
-/venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.db-wal
+*.db-shm
+goodreads_books_backup.db
+.env

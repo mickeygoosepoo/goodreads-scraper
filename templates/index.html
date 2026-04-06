@@ -27,12 +27,75 @@
         .book-title:hover {
             text-decoration: underline;
         }
+
+        .genre-badge {
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .genre-badge:hover {
+            transform: scale(1.1);
+        }
+
+        .author-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .author-link:hover {
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+
+        .sidebar-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .genre-list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .genre-list-item:hover {
+            color: #0d6efd;
+        }
+
+        .genre-list-item:last-child {
+            border-bottom: none;
+        }
+
+        .description-preview {
+            font-size: 0.85rem;
+            color: #6c757d;
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .active-filter {
+            background: #e8f4fd;
+            border: 1px solid #b6d4fe;
+            border-radius: 10px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 
 <body>
 
-    <div class="container py-5">
+    <div class="container-fluid py-5 px-4">
+
         <!-- Flash Message Area -->
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -48,10 +111,11 @@
         {% endif %}
         {% endwith %}
 
+        <!-- Header -->
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h1 class="fw-bold text-dark m-0">📚 Library Dashboard</h1>
-                <p class="text-muted">Manage your scraped Goodreads data</p>
+                <p class="text-muted">Manage your scraped Goodreads data — Normalized Edition</p>
             </div>
 
             <div class="d-flex align-items-center">
@@ -68,55 +132,163 @@
             </div>
         </div>
 
-        <div class="table-container">
-            {% if books %}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 5%">ID</th>
-                            <th style="width: 35%">Title</th>
-                            <th style="width: 20%">Author</th>
-                            <th style="width: 10%">Rating</th>
-                            <th style="width: 20%">Scraped At</th>
-                            <th style="width: 10%" class="text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for book in books %}
-                        <tr>
-                            <td class="text-muted">{{ book[0] }}</td>
-                            <td>
-                                <a href="{{ book[4] }}" target="_blank" class="book-title">
-                                    {{ book[1] }}
-                                </a>
-                            </td>
-                            <td>{{ book[2] }}</td>
-                            <td>
-                                <span class="badge rounded-pill bg-info text-dark">
-                                    ⭐ {{ book[3] }}
-                                </span>
-                            </td>
-                            <td class="text-muted small">{{ book[5] }}</td>
-                            <td class="text-center">
-                                <form action="{{ url_for('remove_entry', book_id=book[0]) }}" method="POST"
-                                    onsubmit="return confirm('Are you sure you want to delete this book?');">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm">
-                                        Delete
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
+        <!-- Active Filter Banner -->
+        {% if filter_type %}
+        <div class="active-filter d-flex justify-content-between align-items-center">
+            <div>
+                <strong>Filtered by {{ filter_type }}:</strong> {{ filter_value }}
+                <span class="text-muted ms-2">({{ books|length }} books)</span>
+            </div>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">✕ Clear Filter</a>
+        </div>
+        {% endif %}
+
+        <!-- Main Layout: Table + Sidebar -->
+        <div class="row">
+
+            <!-- Books Table (Main Content) -->
+            <div class="col-lg-9">
+                <div class="table-container">
+                    {% if books %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 5%">ID</th>
+                                    <th style="width: 25%">Title</th>
+                                    <th style="width: 12%">Author</th>
+                                    <th style="width: 7%">Rating</th>
+                                    <th style="width: 7%">Pages</th>
+                                    <th style="width: 22%">Genres</th>
+                                    <th style="width: 12%">Scraped At</th>
+                                    <th style="width: 10%" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!--
+                                    TEMPLATE NOTE:
+                                    
+                                    Each book tuple from the database looks like:
+                                    (id, title, author_name, rating, url, scraped_at,
+                                     description, page_count, genres_string)
+                                    
+                                    Index:  0     1       2         3      4       5
+                                            6            7           8
+                                    
+                                    We access these by index (book[0], book[1], etc.)
+                                    because Jinja2 templates work with tuples by index.
+                                    
+                                    In a more advanced setup, you'd return dictionaries
+                                    or ORM objects (e.g. SQLAlchemy models) with named
+                                    attributes like book.title, book.author.name, etc.
+                                -->
+                                {% for book in books %}
+                                <tr>
+                                    <td class="text-muted">{{ book[0] }}</td>
+                                    <td>
+                                        <a href="{{ book[4] }}" target="_blank" class="book-title">
+                                            {{ book[1] }}
+                                        </a>
+                                        {% if book[6] %}
+                                        <div class="description-preview" title="{{ book[6] }}">
+                                            {{ book[6] }}
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <!-- Author name is now a clickable filter link -->
+                                        <a href="{{ url_for('books_by_author', author_name=book[2]) }}"
+                                            class="author-link">
+                                            {{ book[2] }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge rounded-pill bg-info text-dark">
+                                            ⭐ {{ book[3] }}
+                                        </span>
+                                    </td>
+                                    <td class="text-muted">
+                                        {{ book[7] if book[7] else '—' }}
+                                    </td>
+                                    <td>
+                                        <!--
+                                            Genre badges: each genre is clickable and links
+                                            to the genre filter view.
+                                            
+                                            book[8] is the genres_string like "Fiction, Fantasy, YA"
+                                            We split it by ", " to create individual badges.
+                                        -->
+                                        {% if book[8] %}
+                                        {% for genre in book[8].split(', ') %}
+                                        <a href="{{ url_for('books_by_genre', genre_name=genre) }}"
+                                            class="badge rounded-pill bg-light text-dark border genre-badge text-decoration-none mb-1">
+                                            {{ genre }}
+                                        </a>
+                                        {% endfor %}
+                                        {% else %}
+                                        <span class="text-muted small">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ book[5] }}</td>
+                                    <td class="text-center">
+                                        <form action="{{ url_for('remove_entry', book_id=book[0]) }}" method="POST"
+                                            onsubmit="return confirm('Are you sure you want to delete this book?');">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <h3 class="text-muted">Your library is empty.</h3>
+                        <p>Click the green button above to start scraping!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Genre Stats Sidebar -->
+            <div class="col-lg-3">
+                <div class="sidebar-card">
+                    <h5 class="fw-bold mb-3">📊 Genres</h5>
+                    
+                    {% if genre_stats %}
+                    <div>
+                        {% for genre in genre_stats[:15] %}
+                        <a href="{{ url_for('books_by_genre', genre_name=genre[0]) }}" class="genre-list-item">
+                            <span>{{ genre[0] }}</span>
+                            <span class="badge bg-primary rounded-pill">{{ genre[1] }}</span>
+                        </a>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted small">
+                        No genres yet. Scrape some books to populate this!
+                    </p>
+                    {% endif %}
+                </div>
+
+                <!-- Schema Info Card -->
+                <div class="sidebar-card mt-3">
+                    <h5 class="fw-bold mb-3">🗄️ Database Schema</h5>
+                    <p class="text-muted small mb-2">
+                        This dashboard uses a <strong>normalized</strong> relational database
+                        with 4 tables linked by foreign keys:
+                    </p>
+                    <ul class="small text-muted">
+                        <li><code>authors</code> — unique author records</li>
+                        <li><code>books</code> — references authors via FK</li>
+                        <li><code>genres</code> — unique genre records</li>
+                        <li><code>book_genres</code> — junction table (M:N)</li>
+                    </ul>
+                </div>
             </div>
-            {% else %}
-            <div class="text-center py-5">
-                <h3 class="text-muted">Your library is empty.</h3>
-                <p>Click the green button above to start scraping!</p>
-            </div>
-            {% endif %}
+
         </div>
     </div>
 

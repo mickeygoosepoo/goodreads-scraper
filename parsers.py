@@ -1,23 +1,48 @@
 # ============================================================================
 # HTML PARSING FUNCTIONS
 # ============================================================================
+# 
+# CS CONCEPT: Parsing & Data Extraction
+# 
+# A "parser" is a program that reads unstructured data (like raw HTML) and
+# extracts structured data (like a Python dictionary) from it.
+#
+# This is a fundamental CS concept that appears everywhere:
+#   - Compilers parse source code into an Abstract Syntax Tree (AST)
+#   - JSON.parse() converts a string into a JavaScript object
+#   - Our scraper parses HTML into a clean {title, author, rating, ...} dict
+#
+# The key idea: RAW DATA → PARSER → STRUCTURED DATA
+# ============================================================================
+
 
 def extract_book_data(soup):
     """
     Extract structured data from a book page's HTML.
     
     This function looks for specific HTML elements that contain the book's
-    title, author, and rating. If an element isn't found, it provides a default value.
+    title, author, rating, genres, description, and page count.
+    If an element isn't found, it provides a default value.
+    
+    DESIGN PATTERN: "Defensive Parsing"
+    ------------------------------------
+    Every extraction is wrapped in try/except. This is intentional.
+    Real-world HTML is messy — Goodreads could change their CSS classes
+    at any time, or a book page might be missing certain fields.
+    
+    Instead of crashing the entire scraper when one field is missing,
+    we gracefully fall back to a default value. This is called
+    "graceful degradation" — the system still works, just with less data.
     
     Args:
         soup: BeautifulSoup object of the book page
         
     Returns:
-        Dictionary with keys: title, author, rating
+        Dictionary with keys: title, author, rating, genres, description, page_count
     """
     data = {}
     
-    # Try to find the book title
+    # ── Title ────────────────────────────────────────────────────────────
     # class_='Text__title1' is the CSS class Goodreads uses for book titles
     try:
         data['title'] = soup.find('h1', class_='Text__title1').text.strip()
@@ -25,17 +50,89 @@ def extract_book_data(soup):
         # If the element isn't found, .find() returns None, and .text raises AttributeError
         data['title'] = 'Unknown'
     
-    # Try to find the author name
+    # ── Author ───────────────────────────────────────────────────────────
     try:
         data['author'] = soup.find('span', class_='ContributorLink__name').text.strip()
     except AttributeError:
         data['author'] = 'Unknown'
     
-    # Try to find the rating
+    # ── Rating ───────────────────────────────────────────────────────────
     try:
         data['rating'] = soup.find('div', class_='RatingStatistics__rating').text.strip()
     except AttributeError:
         data['rating'] = 'N/A'
+    
+    # ── Genres (NEW) ─────────────────────────────────────────────────────
+    # 
+    # CS CONCEPT: One-to-Many vs. Many-to-Many
+    # 
+    # A book has ONE author (one-to-many: one author → many books).
+    # But a book can have MANY genres, and a genre can have MANY books.
+    # This is a "many-to-many" relationship — a concept that's fundamental
+    # to relational database design.
+    #
+    # Here we extract genres as a Python LIST. Later, in db.py, we'll see
+    # how to store this many-to-many relationship using a "junction table."
+    #
+    # Goodreads stores genres as clickable buttons. We look for elements
+    # with the class 'BookPageMetadataSection__genreButton' and extract
+    # the text from each <a> tag's inner <span>.
+    #
+    try:
+        genre_elements = soup.find_all('span', class_='BookPageMetadataSection__genreButton')
+        # Extract the text from each genre element
+        # List comprehension: a compact way to build a list by transforming each item
+        #   [expression FOR item IN iterable]
+        # is equivalent to:
+        #   result = []
+        #   for item in iterable:
+        #       result.append(expression)
+        data['genres'] = [g.find('span', class_='Button__labelItem').text.strip() 
+                          for g in genre_elements 
+                          if g.find('span', class_='Button__labelItem')]
+    except (AttributeError, TypeError):
+        data['genres'] = []
+    
+    # ── Description (NEW) ────────────────────────────────────────────────
+    # 
+    # The book description is stored in a <span> with class 'Formatted'.
+    # We grab the text content and truncate it to avoid storing huge blobs.
+    #
+    # DESIGN DECISION: We store the first 1000 characters.
+    # In a real production system you'd store the full text and truncate
+    # in the UI layer. But for learning purposes, truncating at the DB
+    # level keeps things simpler to inspect.
+    #
+    try:
+        description_element = soup.find('span', class_='Formatted')
+        if description_element:
+            data['description'] = description_element.text.strip()[:1000]
+        else:
+            data['description'] = ''
+    except AttributeError:
+        data['description'] = ''
+    
+    # ── Page Count (NEW) ─────────────────────────────────────────────────
+    #
+    # The page count is displayed as text like "288 pages" within a
+    # <p> tag that has the attribute data-testid="pagesFormat".
+    #
+    # We extract the number by splitting the string on spaces and taking
+    # the first part: "288 pages" → "288" → 288
+    #
+    try:
+        pages_element = soup.find('p', attrs={'data-testid': 'pagesFormat'})
+        if pages_element:
+            pages_text = pages_element.text.strip()
+            # Split "288 pages" into ["288", "pages"] and take the first element
+            # Then convert the string "288" to the integer 288
+            data['page_count'] = int(pages_text.split()[0])
+        else:
+            data['page_count'] = None
+    except (AttributeError, ValueError, IndexError):
+        # ValueError: int() couldn't convert the string to a number
+        # IndexError: the split() produced an empty list
+        data['page_count'] = None
     
     return data
 

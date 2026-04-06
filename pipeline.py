@@ -1,6 +1,6 @@
 from fetcher import fetch_book_page, fetch_list_page
 from parsers import extract_book_data, extract_book_urls
-from db import save_book_to_db
+from db import save_book_to_db  # Now handles normalized schema internally
 import requests  # Only for exception handling
 
 # ============================================================================
@@ -127,7 +127,7 @@ def scrape_list_page(list_url, limit=20, db_name='goodreads_books.db'):
 import asyncio
 import aiohttp
 from fetcher import fetch_page_async
-from db import save_book_to_db_async
+from db import save_book_to_db_async  # Now handles normalized schema internally
 
 async def scrape_single_book_async(session, book_url, db_name='goodreads_books.db'):
     """

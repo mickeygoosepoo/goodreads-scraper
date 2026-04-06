@@ -3,6 +3,7 @@ aiosqlite==0.22.1
 beautifulsoup4==4.14.3
 celery==5.3.6
 certifi==2025.11.12
+flask
 redis==5.0.1
 charset-normalizer==3.4.4
 idna==3.11
